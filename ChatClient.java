@@ -108,9 +108,23 @@ public class ChatClient {
           inBuffer.flip();
 
           String message = decoder.decode(inBuffer).toString();
+          String[] message_split = message.split(" ");
 
-          printMessage(message);
-
+          if (message_split[0].equals("JOINED") && message_split.length == 2) {
+              printMessage(message_split[1].strip() + " joined the room.\n");
+            }
+          else if (message_split[0].equals("LEFT") && message_split.length == 2) {
+              printMessage(message_split[1].strip() + " left the room.\n");
+            }
+          else if (message_split[0].equals("NEWNICK") && message_split.length == 3) {
+              printMessage(message_split[1] + " changed nickname to " + message_split[2]);
+            }
+          else if (message_split[0].equals("MESSAGE") && message_split.length > 2) {
+              printMessage(message_split[1] + ": " + message.substring(message_split[0].length()+message_split[1].length()+2));
+            }
+          else {
+              printMessage(message);
+            }
         }
     }
 

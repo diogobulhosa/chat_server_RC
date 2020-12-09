@@ -135,13 +135,33 @@ public class ChatServer
     }
   }
 
+  static private boolean messageRoom( SocketChannel sc, String message, String room ) throws IOException{
+    buffer.clear();
+    buffer.put(message.getBytes());
+    buffer.flip();
+
+    if(buffer.limit()==0){
+      return false;
+    }
+
+    for( SocketChannel other_sc: users.keySet()){
+
+      if( room.equals(users.get( other_sc ).getRoom() ) ){
+        while (buffer.hasRemaining()) {
+            other_sc.write(buffer);
+        }
+      }
+      buffer.rewind();
+    }
+    return true;
+  }
+
   // Send a message back to a user
    static private boolean messageBack( SocketChannel sc, String message) throws IOException {
        buffer.clear();
        buffer.put(message.getBytes());
        buffer.flip();
 
-       System.out.println("ja estou no message back");
        // If no data, close the connection
        if (buffer.limit()==0) {
            return false;
@@ -157,7 +177,7 @@ public class ChatServer
 
 
   // Just read the message from the socket and send it to stdout
-  static private boolean processInput( SocketChannel sc, User User ) throws IOException {
+  static private boolean processInput( SocketChannel sc, User user ) throws IOException {
     // Read the message to the buffer
     buffer.clear();
     sc.read( buffer );
@@ -172,33 +192,161 @@ public class ChatServer
     // Decode and print the message to stdout
     String message = decoder.decode(buffer).toString();
     String command;
+    String argument; // para o nick e join
     String[] message_split = message.split(" ");
+    System.out.println(Arrays.toString(message_split));
+
 
     if(message_split[0].charAt(0)=='/'){
-      if(message_split.length==1){
+      if(message_split[0].length()==1){
         return true;
       }
       else{
-        if(message_split[0]=="/nick"){
-          if(message_split.length >= 3 ){
-            messageBack(sc, "Error\n");
+        if(message_split[0].equals("/nick")){
+          if(message_split.length != 2 ){
+            messageBack(sc, "ERROR\n");
             return true;
+          }
+          else{
+              command = message_split[0];
+              argument = message_split[1];
+              return processCommand( sc, user , command , argument , null);
+            }
+        }
+        else if(message_split[0].strip().equals("/leave")){
+          System.out.println(message_split.length);
+          if(message_split.length != 1 ){
+            messageBack(sc, "ERROR\n");
+            return true;
+          }
+          else{
+
+              command = message_split[0].strip();
+              return processCommand( sc, user , command , null , null);
+            }
+          }
+        else if(message_split[0].strip().equals("/bye")){
+          System.out.println(message_split.length);
+          if(message_split.length != 1 ){
+            messageBack(sc, "ERROR\n");
+            return true;
+          }
+          else{
+              command = message_split[0].strip();
+              return processCommand( sc, user , command , null , null);
           }
         }
-          else{
-            System.out.println("Workou brou");
-            messageBack(sc, "adeus" );
-            //return para uma função que processa um comando (processCommand)
+        else if(message_split[0].equals("/join")){
+          if(message_split.length != 2 ){
+            messageBack(sc, "ERROR\n");
             return true;
           }
+          else{
+              command = message_split[0];
+              argument = message_split[1];
+              return processCommand( sc, user , command , argument , null);
+            }
+          }
+        else{
+          messageBack( sc, "Not command: ERROR\n");
+          return true;
+        }
       }
     }
-    else {
-      // if estiver numa sala: ok
-      //else Error
-      System.out.println("Error: no room");
+    else{
+      if(user.getState().equals("inside")) return messageRoom( sc, "MESSAGE "+user.getNick().trim()+" "+message, user.getRoom());
+      else return messageBack( sc, "ERROR\n");
     }
 
-    return true;
+
   }
+
+  static private boolean processCommand( SocketChannel sc, User user, String command, String argument, String message ) throws IOException {
+
+    String old_room = user.getRoom();
+    String old_nick = user.getNick();
+
+    switch(command){
+
+      case "/nick":
+        boolean nick_available = true;
+        System.out.println("Nick command");
+        for(User i: users.values()){
+          String nick_try = i.getNick();
+          if(nick_try.equals(argument)) nick_available = false;
+        }
+
+        if(!nick_available){
+          messageBack(sc, "ERROR \n");
+          break;
+        }
+        else{
+          messageBack( sc, "OK\n");
+          user.setNick(argument);
+          if(user.getState().equals("init")){
+            user.setState("outside");
+          }
+          else if(user.getState().equals("inside")){
+            messageRoom( sc, "NEWNICK "+old_nick.trim()+" "+argument, user.getRoom());
+          }
+          break;
+        }
+
+      case "/join":
+        System.out.println("Join command");
+        if(user.getState().equals("init")){
+          messageBack( sc, "ERROR\n");
+          break;
+        }
+        else {
+          if(user.getState().equals("outside")){
+            messageRoom( sc, "JOINED "+user.getNick(), argument );
+            user.setState("inside");
+            user.setRoom(argument);
+            messageBack( sc, "Entrou na sala OK\n");
+            break;
+          }
+          else {
+            messageRoom( sc, "LEFT "+user.getNick(), old_room );
+            messageRoom( sc, "JOINED "+user.getNick(), argument );
+            user.setRoom(argument);
+            user.setState("inside");
+            messageBack(sc, "Mudou de sala OK\n");
+            break;
+          }
+        }
+
+      case "/leave":
+          System.out.println("Leave command");
+          if(user.getState().equals("init")){
+            messageBack( sc, "ERROR\n");
+            break;
+          }
+          else {
+            if(user.getState().equals("outside")){
+              messageBack( sc, "ERROR\n");
+              break;
+            }
+            else {
+              user.setRoom("");
+              user.setState("outside");
+              messageRoom( sc, "LEFT "+user.getNick(), old_room );
+              messageBack(sc, "Saiu da sala OK\n");
+              break;
+            }
+          }
+      case "/bye":
+            System.out.println("Bye command");
+            if(user.getState().equals("inside")){
+              users.remove( sc );
+              messageRoom( sc, "LEFT "+user.getNick(), old_room);
+              users.remove( sc );
+              messageBack( sc, "BYE\n");
+              return false;
+              }
+            }
+      return true;
+    }
+
+
 }
