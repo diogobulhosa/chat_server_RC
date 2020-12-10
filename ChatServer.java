@@ -148,7 +148,7 @@ public class ChatServer
 
       if( room.equals(users.get( other_sc ).getRoom() ) ){
         while (buffer.hasRemaining()) {
-            other_sc.write(buffer);
+          other_sc.write(buffer);
         }
       }
       buffer.rewind();
@@ -157,23 +157,23 @@ public class ChatServer
   }
 
   // Send a message back to a user
-   static private boolean messageBack( SocketChannel sc, String message) throws IOException {
-       buffer.clear();
-       buffer.put(message.getBytes());
-       buffer.flip();
+  static private boolean messageUser( SocketChannel sc, String message) throws IOException {
+    buffer.clear();
+    buffer.put(message.getBytes());
+    buffer.flip();
 
-       // If no data, close the connection
-       if (buffer.limit()==0) {
-           return false;
-       }
+    // If no data, close the connection
+    if (buffer.limit()==0) {
+      return false;
+    }
 
-       //Send the message to the user
-       while (buffer.hasRemaining()) {
-           sc.write(buffer);
-       }
+    //Send the message to the user
+    while (buffer.hasRemaining()) {
+      sc.write(buffer);
+    }
 
-       return true;
-   }
+    return true;
+  }
 
 
   // Just read the message from the socket and send it to stdout
@@ -194,7 +194,6 @@ public class ChatServer
     String command;
     String argument; // para o nick e join
     String[] message_split = message.split(" ");
-    System.out.println(Arrays.toString(message_split));
 
 
     if(message_split[0].charAt(0)=='/'){
@@ -204,58 +203,72 @@ public class ChatServer
       else{
         if(message_split[0].equals("/nick")){
           if(message_split.length != 2 ){
-            messageBack(sc, "ERROR\n");
+            messageUser(sc, "ERROR\n");
             return true;
           }
           else{
-              command = message_split[0];
-              argument = message_split[1];
-              return processCommand( sc, user , command , argument , null);
-            }
+            command = message_split[0];
+            argument = message_split[1];
+            return processCommand( sc, user , command , argument , null);
+          }
         }
         else if(message_split[0].strip().equals("/leave")){
-          System.out.println(message_split.length);
           if(message_split.length != 1 ){
-            messageBack(sc, "ERROR\n");
+            messageUser(sc, "ERROR\n");
             return true;
           }
           else{
 
-              command = message_split[0].strip();
-              return processCommand( sc, user , command , null , null);
-            }
+            command = message_split[0].strip();
+            return processCommand( sc, user , command , null , null);
           }
+        }
         else if(message_split[0].strip().equals("/bye")){
-          System.out.println(message_split.length);
           if(message_split.length != 1 ){
-            messageBack(sc, "ERROR\n");
+            messageUser(sc, "ERROR\n");
             return true;
           }
           else{
-              command = message_split[0].strip();
-              return processCommand( sc, user , command , null , null);
+            command = message_split[0].strip();
+            return processCommand( sc, user , command , null , null);
           }
         }
         else if(message_split[0].equals("/join")){
           if(message_split.length != 2 ){
-            messageBack(sc, "ERROR\n");
+            messageUser(sc, "ERROR\n");
             return true;
           }
           else{
-              command = message_split[0];
-              argument = message_split[1];
-              return processCommand( sc, user , command , argument , null);
-            }
+            command = message_split[0];
+            argument = message_split[1];
+            return processCommand( sc, user , command , argument , null);
           }
+        }
+        else if(message_split[0].equals("/priv")){
+          if(message_split.length < 3){
+            messageUser(sc, "ERROR\n");
+            return true;
+          }
+          else{
+            command = message_split[0];
+            argument = message_split[1];
+            message = message.substring(command.length() + argument.length() + 2);
+            return processCommand( sc, user , command , argument , message);
+          }
+        }
+        else if(message_split[0].charAt(1)=='/'){
+          if(user.getState().equals("inside")) return messageRoom( sc, "MESSAGE "+user.getNick().trim()+" "+message.substring(1), user.getRoom());
+          else return messageUser( sc, "ERROR\n");
+        }
         else{
-          messageBack( sc, "Not command: ERROR\n");
+          messageUser( sc, "Not command: ERROR\n");
           return true;
         }
       }
     }
     else{
       if(user.getState().equals("inside")) return messageRoom( sc, "MESSAGE "+user.getNick().trim()+" "+message, user.getRoom());
-      else return messageBack( sc, "ERROR\n");
+      else return messageUser( sc, "ERROR\n");
     }
 
 
@@ -269,84 +282,97 @@ public class ChatServer
     switch(command){
 
       case "/nick":
-        boolean nick_available = true;
-        System.out.println("Nick command");
-        for(User i: users.values()){
-          String nick_try = i.getNick();
-          if(nick_try.equals(argument)) nick_available = false;
-        }
+      boolean nick_available = true;
+      //System.out.println("Nick command");
+      for(User i: users.values()){
+        String nick_try = i.getNick();
+        if(nick_try.equals(argument)) nick_available = false;
+      }
 
-        if(!nick_available){
-          messageBack(sc, "ERROR \n");
-          break;
+      if(!nick_available){
+        messageUser(sc, "ERROR \n");
+        break;
+      }
+      else{
+        messageUser( sc, "OK\n");
+        user.setNick(argument);
+        if(user.getState().equals("init")){
+          user.setState("outside");
         }
-        else{
-          messageBack( sc, "OK\n");
-          user.setNick(argument);
-          if(user.getState().equals("init")){
-            user.setState("outside");
-          }
-          else if(user.getState().equals("inside")){
-            messageRoom( sc, "NEWNICK "+old_nick.trim()+" "+argument, user.getRoom());
-          }
-          break;
+        else if(user.getState().equals("inside")){
+          messageRoom( sc, "NEWNICK "+old_nick.trim()+" "+argument, user.getRoom());
         }
+        break;
+      }
 
       case "/join":
-        System.out.println("Join command");
-        if(user.getState().equals("init")){
-          messageBack( sc, "ERROR\n");
+      //System.out.println("Join command");
+      if(user.getState().equals("init")){
+        messageUser( sc, "ERROR\n");
+        break;
+      }
+      else {
+        if(user.getState().equals("outside")){
+          messageRoom( sc, "JOINED "+user.getNick(), argument );
+          user.setState("inside");
+          user.setRoom(argument);
+          messageUser( sc, "Entrou na sala OK\n");
           break;
         }
         else {
-          if(user.getState().equals("outside")){
-            messageRoom( sc, "JOINED "+user.getNick(), argument );
-            user.setState("inside");
-            user.setRoom(argument);
-            messageBack( sc, "Entrou na sala OK\n");
-            break;
-          }
-          else {
-            messageRoom( sc, "LEFT "+user.getNick(), old_room );
-            messageRoom( sc, "JOINED "+user.getNick(), argument );
-            user.setRoom(argument);
-            user.setState("inside");
-            messageBack(sc, "Mudou de sala OK\n");
-            break;
-          }
+          messageRoom( sc, "LEFT "+user.getNick(), old_room );
+          messageRoom( sc, "JOINED "+user.getNick(), argument );
+          user.setRoom(argument);
+          user.setState("inside");
+          messageUser(sc, "Mudou de sala OK\n");
+          break;
         }
+      }
 
       case "/leave":
-          System.out.println("Leave command");
-          if(user.getState().equals("init")){
-            messageBack( sc, "ERROR\n");
-            break;
-          }
-          else {
-            if(user.getState().equals("outside")){
-              messageBack( sc, "ERROR\n");
-              break;
-            }
-            else {
-              user.setRoom("");
-              user.setState("outside");
-              messageRoom( sc, "LEFT "+user.getNick(), old_room );
-              messageBack(sc, "Saiu da sala OK\n");
-              break;
-            }
-          }
+      //System.out.println("Leave command");
+      if(user.getState().equals("init")){
+        messageUser( sc, "ERROR\n");
+        break;
+      }
+      else {
+        if(user.getState().equals("outside")){
+          messageUser( sc, "ERROR\n");
+          break;
+        }
+        else {
+          user.setRoom("");
+          user.setState("outside");
+          messageRoom( sc, "LEFT "+user.getNick(), old_room );
+          messageUser(sc, "Saiu da sala OK\n");
+          break;
+        }
+      }
       case "/bye":
-            System.out.println("Bye command");
-            if(user.getState().equals("inside")){
-              users.remove( sc );
-              messageRoom( sc, "LEFT "+user.getNick(), old_room);
-              users.remove( sc );
-              messageBack( sc, "BYE\n");
-              return false;
-              }
-            }
-      return true;
+      //System.out.println("Bye command");
+      if(user.getState().equals("inside")){
+        users.remove( sc );
+        messageRoom( sc, "LEFT "+user.getNick(), old_room);
+        users.remove( sc );
+        messageUser( sc, "BYE\n");
+        return false;
+      }
+      case "/priv":
+      boolean user_exists = false;
+      for( SocketChannel sc_receiver: users.keySet()){
+        if( argument.equals(users.get( sc_receiver ).getNick().trim() ) && !argument.equals( user.getNick().trim() ) ){
+          user_exists = true;
+          messageUser( sc_receiver , "PRIVATE "+user.getNick().trim()+" "+message);
+          messageUser( sc , "PRIVATE "+user.getNick().trim()+" "+message);
+          return true;
+        }
+      }
+      messageUser( sc, "ERROR\n" );
+      break;
+
     }
+    return true;
+  }
 
 
 }
