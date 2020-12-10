@@ -3,7 +3,7 @@
 
 Compilar: 
 
-#### - nº de porta
+'####' - nº de porta à escolha (de preferência superior ou igual a 8000)
 
 javac ChatServer.java && java ChatServer ####
 
